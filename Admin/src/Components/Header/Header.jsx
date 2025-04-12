@@ -1,44 +1,33 @@
 import React, { useState } from "react";
-import { FaCircleUser } from "react-icons/fa6";
+import { FaRegUser } from "react-icons/fa";
+import { PiSignOutBold } from "react-icons/pi";
+import { Link, useNavigate } from "react-router-dom"; // Add useNavigate hook for redirect
 
-import Badge from "@mui/material/Badge";
-import { styled } from "@mui/material/styles";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import { Divider } from "@mui/material";
-import { FaRegUser } from "react-icons/fa";
-import { PiSignOutBold } from "react-icons/pi";
-import { Link } from "react-router-dom";
-
-const StyledBadge = styled(Badge)(({ theme }) => ({
-  "& .MuiBadge-badge": {
-    right: -3,
-    top: 13,
-    border: `2px solid ${theme.palette.background.paper}`,
-    padding: "0 4px",
-  },
-}));
 
 function Header() {
-  const [anchorMyAccont, setAnchorMyAccont] = useState(null);
-  const openMyAcc = Boolean(anchorMyAccont);
+  const [anchorMyAccount, setAnchorMyAccount] = useState(null); // Fixed typo
+  const openMyAccount = Boolean(anchorMyAccount);
   const token = localStorage.getItem("stoken");
   const name = localStorage.getItem("name") || "";
+  const navigate = useNavigate(); // Hook for navigation after logout
 
-  const handleClickMyAcc = (event) => {
+  const handleClickMyAccount = (event) => {
     if (token) {
-      setAnchorMyAccont(event.currentTarget);
+      setAnchorMyAccount(event.currentTarget); // Fixed typo
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem("stoken");
     localStorage.removeItem("name");
-    window.location.reload();
+    navigate("/login"); // Redirect to login page after logout
   };
 
-  const handleCloseMyAcc = () => {
-    setAnchorMyAccont(null);
+  const handleCloseMyAccount = () => {
+    setAnchorMyAccount(null); // Fixed typo
   };
 
   return (
@@ -47,11 +36,11 @@ function Header() {
         <div className="loginBtn flex justify-end w-full pr-6">
           {token ? (
             <div
-              onClick={handleClickMyAcc}
+              onClick={handleClickMyAccount}
               className="cursor-pointer bg-[#5f6fff] text-white text-[18px] font-semibold rounded-full w-10 h-10 flex items-center justify-center"
               title="Account"
             >
-              {name[0].toUpperCase()}
+              {name && name[0] ? name[0].toUpperCase() : ""} {/* Fix applied here */}
             </div>
           ) : (
             <Link to="/login">
@@ -64,11 +53,11 @@ function Header() {
 
         {/* Dropdown Menu */}
         <Menu
-          anchorEl={anchorMyAccont}
+          anchorEl={anchorMyAccount}
           id="account-menu"
-          open={openMyAcc}
-          onClose={handleCloseMyAcc}
-          onClick={handleCloseMyAcc}
+          open={openMyAccount}
+          onClose={handleCloseMyAccount}
+          onClick={handleCloseMyAccount}
           slotProps={{
             paper: {
               elevation: 0,
@@ -97,7 +86,7 @@ function Header() {
           <MenuItem className="!bg-white">
             <div className="flex items-center gap-2">
               <div className="rounded-full w-[38px] h-[38px] bg-[#5f6fff] text-white flex items-center justify-center text-lg font-semibold">
-                {name[0].toUpperCase()}
+                {name && name[0] ? name[0].toUpperCase() : ""}
               </div>
               <div className="info">
                 <h3 className="text-[16px] font-[500] !leading-5">

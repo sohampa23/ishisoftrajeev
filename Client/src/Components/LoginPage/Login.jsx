@@ -59,7 +59,7 @@ const Login = () => {
           toast.success("Account created successfully! Please verify OTP.");
           setIsOtpPage(true); // Show OTP page after successful registration
           localStorage.setItem("email", email); // Store email temporarily for verification
-
+          localStorage.setItem("token", data.token);
           // Send the OTP verification email after successful registration
           await sendVerificationEmail();
         } else {
@@ -73,6 +73,7 @@ const Login = () => {
         if (data.success) {
           setIsLoggedin(true);
           getuserData();
+          localStorage.setItem("token", data.token);
           navigate("/");
         } else {
           toast.error(data.message);
@@ -234,4 +235,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Login;

@@ -2,6 +2,9 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import usermodel from '../model/mongobd_usermodel.js';
 import transporter from '../config/nodemailer.js';
+import Cart from '../model/cart.js'
+import Wishlist from '../model/wishlist.js';
+import Product from '../model/addproduct.js'
 
 // for register function----
 export const register = async (req, res) => {
@@ -104,7 +107,7 @@ export const login = async (req, res) => {
             maxAge: 7 * 24 * 60 * 60 * 1000
         });
 
-        return res.json({ success: true });
+        return res.json({ success: true, token });
     } catch (error) {
         res.json({
             success: false,
@@ -123,7 +126,6 @@ export const logout = async (req, res) => {
             sameSite: process.env.NODE_ENV == 'production' ? 'none' : 'strict',
         })
         return res.json({ success: true, message: "Logged out" })
-
     } catch (error) {
         res.json({
             success: false,
@@ -263,28 +265,28 @@ export const resetpassword = async (req, res) => {
         return res.json({ success: false, message: 'Email, OTP, and new password are required' });
     }
     try {
-        const user = await usermodel.findOne({email});
-        if(!user) {
-            return res.json({success:true, message:'user not found'});
+        const user = await usermodel.findOne({ email });
+        if (!user) {
+            return res.json({ success: true, message: 'user not found' });
         }
 
-        if(user.resetotp == '' || user.resetotp !== otp) {
-            return res.json({success:false, message : 'Invalis OTP'});
+        if (user.resetotp == '' || user.resetotp !== otp) {
+            return res.json({ success: false, message: 'Invalis OTP' });
         }
-         
-        if(user.resetotpexpireAt < Date.now()){
-            return res.json({success:false, message: 'OTP Expired'});
+
+        if (user.resetotpexpireAt < Date.now()) {
+            return res.json({ success: false, message: 'OTP Expired' });
         }
 
         //all of the valid then reste password--
         const hashedpassword = await bcrypt.hash(newpassword, 10);
         user.password = hashedpassword;
-        user.resetotp='';
-        user.resetotpexpireAt=0;
+        user.resetotp = '';
+        user.resetotpexpireAt = 0;
 
         await user.save();
-        
-        return res.json({success:true, message : 'password has been reset successfully'});
+
+        return res.json({ success: true, message: 'password has been reset successfully' });
 
 
     } catch (error) {
@@ -292,3 +294,293 @@ export const resetpassword = async (req, res) => {
 
     }
 }
+
+//Addtocart api-----
+export const Addtocart = async (req, res) => {
+    const { productId, quantity } = req.body;
+    const userId = req.user.id;
+
+    try {
+        //  Validate productId exists in DB
+        const product = await Product.findById(productId);
+        if (!product) {
+            return res.status(404).json({ message: "Product not found" });
+        }
+
+        //  Get or create cart
+        let cart = await Cart.findOne({ userId });
+        if (!cart) cart = new Cart({ userId, items: [] });
+
+        //  Update quantity if already exists, else push new
+        const existingItem = cart.items.find(item =>
+            item.productId.toString() === productId
+        );
+
+        if (existingItem) {
+            existingItem.quantity += quantity;
+        } else {
+            cart.items.push({ productId, quantity });
+        }
+
+        await cart.save();
+
+        //  Populate product details
+        await cart.populate('items.productId');
+
+        //  Safely map and ignore nulls
+        const formatted = cart.items
+            .filter(item => item.productId) // ignore bad/missing product refs
+            .map(item => ({
+                product: {
+                    _id: item.productId._id,
+                    name: item.productId.name,
+                    image: item.productId.image,
+                    price: item.productId.price
+                },
+                quantity: item.quantity
+            }));
+
+        res.json({ cart: formatted });
+    } catch (err) {
+        console.error("Error in Addtocart:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+//get the cart---
+export const GetCart = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const cart = await Cart.findOne({ userId }).populate("items.productId");
+
+        if (!cart || cart.items.length === 0) {
+            return res.json({ cart: [] });
+        }
+
+        const formatted = cart.items
+            .filter(item => item.productId)
+            .map(item => ({
+                product: {
+                    _id: item.productId._id,
+                    title: item.productId.title,
+                    price: item.productId.price,
+                    oldprice: item.productId.oldprice,
+                    discount: item.productId.discount,
+                    brand: item.productId.brand,
+                    image: item.productId.images[0]?.url || ''
+                },
+                quantity: item.quantity
+            }));
+        console.log("ffff", formatted)
+        res.json({ cart: formatted });
+    } catch (err) {
+        console.error("Get Cart Error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+//Add to Wishlist------
+export const AddToWishlist = async (req, res) => {
+    const { productId } = req.body;
+    const userId = req.user.id;
+
+    try {
+        const product = await Product.findById(productId);
+        if (!product) return res.status(404).json({ message: "Product not found" });
+
+        let wishlist = await Wishlist.findOne({ userId });
+        if (!wishlist) wishlist = new Wishlist({ userId, products: [] });
+
+        const alreadyInWishlist = wishlist.products.includes(productId);
+        if (!alreadyInWishlist) {
+            wishlist.products.push(productId);
+        }
+
+        await wishlist.save();
+        await wishlist.populate("products");
+
+        const formatted = wishlist.products.map(product => ({
+            _id: product._id,
+            title: product.title,
+            price: product.price,
+            oldprice: product.oldprice,
+            discount: product.discount,
+            brand: product.brand,
+            image: product.images[0]?.url || ""
+        }));
+
+        res.json({ wishlist: formatted });
+    } catch (err) {
+        console.error("Add to Wishlist Error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+//get the wishlist----
+export const GetWishlist = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const wishlist = await Wishlist.findOne({ userId }).populate("products");
+
+        if (!wishlist || wishlist.products.length === 0) {
+            return res.json({ wishlist: [] });
+        }
+
+        const formatted = wishlist.products.map(product => ({
+            _id: product._id,
+            title: product.title,
+            price: product.price,
+            oldprice: product.oldprice,
+            discount: product.discount,
+            brand: product.brand,
+            image: product.images[0]?.url || ""
+        }));
+
+        res.json({ wishlist: formatted });
+    } catch (err) {
+        console.error("Get Wishlist Error:", err);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+//Dlelete from add to cart---
+export const DeleteFromCart = async (req, res) => {
+    const userId = req.user.id;
+    const { productId } = req.params;
+  
+    try {
+      // Find the cart for the user
+      const cart = await Cart.findOne({ userId });
+  
+      if (!cart) {
+        return res.status(404).json({ message: "Cart not found" });
+      }
+  
+      // Filter out the product to remove
+      const updatedItems = cart.items.filter(
+        item => item.productId.toString() !== productId
+      );
+  
+      // If item was not in the cart
+      if (updatedItems.length === cart.items.length) {
+        return res.status(404).json({ message: "Item not found in cart" });
+      }
+  
+      cart.items = updatedItems;
+  
+      await cart.save();
+      await cart.populate("items.productId");
+  
+      const formatted = cart.items
+        .filter(item => item.productId)
+        .map(item => ({
+          product: {
+            _id: item.productId._id,
+            title: item.productId.title,
+            price: item.productId.price,
+            oldprice: item.productId.oldprice,
+            discount: item.productId.discount,
+            brand: item.productId.brand,
+            image: item.productId.images[0]?.url || ""
+          },
+          quantity: item.quantity
+        }));
+  
+      res.json({ message: "Item removed from cart", cart: formatted });
+    } catch (err) {
+      console.error("DeleteFromCart Error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  };
+  
+// delete wishlist product--
+export const RemoveFromWishlist = async (req, res) => {
+    const userId = req.user.id;
+    const { productId } = req.params;
+  
+    try {
+      const wishlist = await Wishlist.findOne({ userId });
+  
+      if (!wishlist) {
+        return res.status(404).json({ message: "Wishlist not found" });
+      }
+  
+      const updatedProducts = wishlist.products.filter(
+        id => id.toString() !== productId
+      );
+  
+      if (updatedProducts.length === wishlist.products.length) {
+        return res.status(404).json({ message: "Item not found in wishlist" });
+      }
+  
+      wishlist.products = updatedProducts;
+  
+      await wishlist.save();
+      await wishlist.populate("products");
+  
+      const formatted = wishlist.products.map(product => ({
+        product: {
+          _id: product._id,
+          title: product.title,
+          price: product.price,
+          oldprice: product.oldprice,
+          discount: product.discount,
+          brand: product.brand,
+          image: product.images[0]?.url || ""
+        }
+      }));
+  
+      res.json({ message: "Item removed from wishlist", wishlist: formatted });
+    } catch (err) {
+      console.error("RemoveFromWishlist Error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  };
+
+//Toggle cart------
+export const ToggleCartQuantity = async (req, res) => {
+    const { productId, quantity } = req.body;
+    const userId = req.user.id;
+  
+    try {
+      if (isNaN(quantity) || quantity < 1) {
+        return res.status(400).json({ message: "Quantity must be at least 1" });
+      }
+  
+      const product = await Product.findById(productId);
+      if (!product) return res.status(404).json({ message: "Product not found" });
+  
+      if (quantity > product.quantity) {
+        return res.status(400).json({ message: "Exceeds available stock" });
+      }
+  
+      const cart = await Cart.findOne({ userId });
+      if (!cart) return res.status(404).json({ message: "Cart not found" });
+  
+      const item = cart.items.find(item => item.productId.toString() === productId);
+      if (!item) return res.status(404).json({ message: "Product not in cart" });
+  
+      // Update quantity
+      item.quantity = quantity;
+  
+      // Save and populate
+      await cart.save();
+      await cart.populate("items.productId"); // Ensure population is called AFTER save
+  
+      // Return full populated data
+      res.status(200).json({
+        cart: cart.items.map(item => ({
+          product: item.productId, // fully populated product
+          quantity: item.quantity,
+          price: item.price, // if you added it
+        })),
+      });
+    } catch (error) {
+      console.error("Update Cart Error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  };
+  
+
+  
+

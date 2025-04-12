@@ -13,7 +13,6 @@ import connectcloudinary from "./config/cloudinary.js";
 import sellerrouter from "./routes/sellerroutes.js";
 import clientrouter from "./routes/clientroute.js";
 
-
 const app = express();
 const port = process.env.port || 7000
 connectDB();
@@ -31,6 +30,7 @@ app.use(cors({
 app.use('/api/auth',router)
 app.use('/api/user',userouter)
 app.use('/api/product',productrouter)
+
 
 app.use("/api", uploadrouter);
 
